@@ -7,7 +7,12 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Clone LigandMPNN repository
-RUN git clone https://github.com/dauparas/LigandMPNN.git repo/LigandMPNN
+RUN mkdir -p repo && \
+    for attempt in 1 2 3; do \
+      echo "Clone attempt $attempt/3"; \
+      git clone --depth 1 https://github.com/dauparas/LigandMPNN.git repo/LigandMPNN && break; \
+      if [ $attempt -lt 3 ]; then sleep 5; fi; \
+    done
 
 # Install LigandMPNN dependencies
 RUN pip install --no-cache-dir -r repo/LigandMPNN/requirements.txt
