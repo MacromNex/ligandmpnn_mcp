@@ -14,8 +14,10 @@ RUN mkdir -p repo && \
       if [ $attempt -lt 3 ]; then sleep 5; fi; \
     done
 
-# Install LigandMPNN dependencies
-RUN pip install --no-cache-dir -r repo/LigandMPNN/requirements.txt
+# Install LigandMPNN dependencies (excluding PyTorch to avoid conflicts with base image)
+# The pytorch/pytorch base image already has PyTorch 2.2.0 with proper CUDA bindings
+RUN pip install --no-cache-dir \
+    $(grep -v -E "^(torch|torchaudio|torchvision)" repo/LigandMPNN/requirements.txt | grep -v "^#" | tr '\n' ' ')
 
 # Install MCP dependencies
 RUN pip install --no-cache-dir --ignore-installed fastmcp loguru
