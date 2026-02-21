@@ -20,9 +20,13 @@ RUN bash repo/LigandMPNN/get_model_params.sh repo/LigandMPNN/model_params
 
 # Copy application source code
 COPY scripts/ ./scripts/
+RUN chmod -R a+r /app/scripts/
 COPY src/ ./src/
+RUN chmod -R a+r /app/src/
 COPY examples/ ./examples/
+RUN chmod -R a+r /app/examples/
 COPY configs/ ./configs/
+RUN chmod -R a+r /app/configs/
 
 # Create working directories
 RUN mkdir -p results jobs tmp
