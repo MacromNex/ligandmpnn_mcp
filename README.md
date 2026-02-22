@@ -1,705 +1,149 @@
 # LigandMPNN MCP
 
-> AI-powered protein design toolkit for scaffold-based sequence generation and ligand-aware protein design using LigandMPNN through Model Context Protocol (MCP)
+**Ligand-aware protein sequence design using LigandMPNN via Docker**
 
-## Table of Contents
-- [Overview](#overview)
-- [Installation](#installation)
-- [Local Usage (Scripts)](#local-usage-scripts)
-- [MCP Server Installation](#mcp-server-installation)
-- [Using with Claude Code](#using-with-claude-code)
-- [Using with Gemini CLI](#using-with-gemini-cli)
-- [Available Tools](#available-tools)
-- [Examples](#examples)
-- [Troubleshooting](#troubleshooting)
+An MCP (Model Context Protocol) server for protein design with 7 core tools:
+- Design protein sequences with ligand context awareness
+- Score protein sequences for likelihood
+- Constrained design with fixed/redesigned residues
+- CA-only design using backbone coordinates
+- Submit large-scale batch design jobs with async job tracking
+- Monitor and retrieve design results
+- List available example structures
 
-## Overview
+## Quick Start with Docker
 
-The LigandMPNN MCP provides comprehensive protein design capabilities through both direct script execution and MCP integration. This toolkit enables scaffold-based protein sequence generation with support for ligand-aware design, constrained optimization, and sequence likelihood calculation.
+### Approach 1: Pull Pre-built Image from GitHub
 
-### Features
-- **Protein-Ligand Complex Design**: Context-aware sequence generation considering ligand binding
-- **Constrained Design**: Fixed/redesigned residue specification with flexible constraints
-- **Sequence Scoring**: Likelihood calculation and probability estimation for protein sequences
-- **Batch Processing**: Submit large-scale design jobs for background processing
-- **Side Chain Packing**: Combined sequence design and structural optimization
-- **Multiple Model Support**: ProteinMPNN, LigandMPNN, and SolubleMPNN variants
-### Directory Structure
+The fastest way to get started. A pre-built Docker image is automatically published to GitHub Container Registry on every release.
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/macromnex/ligandmpnn_mcp:latest
+
+# Register with Claude Code (runs as current user to avoid permission issues)
+claude mcp add ligandmpnn -- docker run -i --rm --user `id -u`:`id -g` --gpus all --ipc=host -v `pwd`:`pwd` ghcr.io/macromnex/ligandmpnn_mcp:latest
 ```
-./
-├── README.md               # This file
-├── env/                    # Conda environment
-├── src/
-│   ├── server.py           # MCP server
-│   └── jobs/               # Job management system
-├── scripts/
-│   ├── protein_design.py   # Basic protein sequence design
-│   ├── ligand_design.py    # Ligand-aware protein design
-│   ├── sequence_scoring.py # Sequence likelihood calculation
-│   ├── constrained_design.py # Constrained design with fixed residues
-│   └── lib/                # Shared utilities
-├── examples/
-│   └── data/               # Demo PDB structures and configs
-├── configs/                # Configuration files
-└── repo/                   # Original LigandMPNN repository
-```
+
+**Note:** Run from your project directory. `` `pwd` `` expands to the current working directory.
+
+**Requirements:**
+- Docker with GPU support (`nvidia-docker` or Docker with NVIDIA runtime)
+- Claude Code installed
+
+That's it! The LigandMPNN MCP server is now available in Claude Code.
 
 ---
 
-## Installation
+### Approach 2: Build Docker Image Locally
 
-### Quick Setup (Recommended)
-
-Run the automated setup script:
+Build the image yourself and install it into Claude Code. Useful for customization or offline environments.
 
 ```bash
+# Clone the repository
+git clone https://github.com/MacromNex/ligandmpnn_mcp.git
 cd ligandmpnn_mcp
-bash quick_setup.sh
+
+# Build the Docker image
+docker build -t ligandmpnn_mcp:latest .
+
+# Register with Claude Code (runs as current user to avoid permission issues)
+claude mcp add ligandmpnn -- docker run -i --rm --user `id -u`:`id -g` --gpus all --ipc=host -v `pwd`:`pwd` ligandmpnn_mcp:latest
 ```
 
-The script will create the conda environment, clone the LigandMPNN repository, install all dependencies, and display the Claude Code configuration. See `quick_setup.sh --help` for options like `--skip-env` or `--skip-repo`.
+**Note:** Run from your project directory. `` `pwd` `` expands to the current working directory.
 
-### Prerequisites
-- Conda or Mamba (mamba recommended for faster installation)
-- Python 3.10+
-- CUDA-capable GPU (optional, but recommended for performance)
+**Requirements:**
+- Docker with GPU support
+- Claude Code installed
+- Git (to clone the repository)
 
-### Manual Installation (Alternative)
-
-If you prefer manual installation or need to customize the setup, follow `reports/step3_environment.md`:
-
-```bash
-# Navigate to the MCP directory
-cd /home/xux/Desktop/ProteinMCP/ProteinMCP/tool-mcps/ligandmpnn_mcp
-
-# Create conda environment (use mamba if available)
-mamba create -p ./env python=3.11 -y
-# or: conda create -p ./env python=3.11 -y
-
-# Activate environment
-mamba activate ./env
-# or: conda activate ./env
-
-# Install Dependencies
-pip install -r repo/LigandMPNN/requirements.txt
-
-# Install MCP dependencies
-pip install fastmcp loguru --ignore-installed
-```
-
-### Verify Installation
-
-```bash
-# Test imports
-python -c "import torch; import numpy; import fastmcp; print('✅ Environment setup successful')"
-
-# Test MCP server
-python -c "
-import sys; sys.path.insert(0, 'src')
-from server import mcp
-import asyncio
-tools = asyncio.run(mcp.get_tools())
-print(f'Found {len(tools)} MCP tools')
-"
-```
+**About the Docker Flags:**
+- `-i` — Interactive mode for Claude Code
+- `--rm` — Automatically remove container after exit
+- `` --user `id -u`:`id -g` `` — Runs the container as your current user, so output files are owned by you (not root)
+- `--gpus all` — Grants access to all available GPUs
+- `--ipc=host` — Uses host IPC namespace for PyTorch shared memory
+- `-v` — Mounts your project directory so the container can access your data
 
 ---
 
-## Local Usage (Scripts)
+## Verify Installation
 
-You can use the scripts directly without MCP for local processing.
-
-### Available Scripts
-
-| Script | Description | Example |
-|--------|-------------|---------|
-| `scripts/protein_design.py` | Basic protein sequence design using ProteinMPNN | See below |
-| `scripts/ligand_design.py` | Ligand-aware protein design using LigandMPNN | See below |
-| `scripts/sequence_scoring.py` | Protein sequence likelihood calculation | See below |
-| `scripts/constrained_design.py` | Constrained design with fixed/redesigned residues | See below |
-
-### Script Examples
-
-#### Basic Protein Design
+After adding the MCP server, you can verify it's working:
 
 ```bash
-# Activate environment
-mamba activate ./env
-
-# Run protein design
-python scripts/protein_design.py \
-  --input examples/data/1BC8.pdb \
-  --output results/protein_design \
-  --num_sequences 3 \
-  --temperature 0.1
-```
-
-**Parameters:**
-- `--input, -i`: Input PDB file (required)
-- `--output, -o`: Output directory (default: results/)
-- `--num_sequences, -n`: Number of sequences to generate (default: 3)
-- `--temperature, -t`: Sampling temperature for diversity (default: 0.1)
-- `--config, -c`: Configuration file (optional)
-
-#### Ligand-Aware Design
-
-```bash
-python scripts/ligand_design.py \
-  --input examples/data/1BC8.pdb \
-  --output results/ligand_design \
-  --num_sequences 3 \
-  --use_atom_context
-```
-
-**Parameters:**
-- `--use_atom_context`: Enable ligand atom context (recommended)
-- `--use_side_chain_context`: Enable side chain context
-- `--no_ligand_context`: Disable ligand context
-
-#### Sequence Scoring
-
-```bash
-python scripts/sequence_scoring.py \
-  --input examples/data/1BC8.pdb \
-  --sequences "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG" \
-  --output results/scoring.pt
-```
-
-**Parameters:**
-- `--sequences`: Protein sequences to score (comma or slash separated)
-- `--sequences_file`: FASTA file with sequences to score
-- `--save_probs`: Save per-residue probabilities
-
-#### Constrained Design
-
-```bash
-python scripts/constrained_design.py \
-  --input examples/data/1BC8.pdb \
-  --output results/constrained \
-  --fixed_residues "C1 C2 C3" \
-  --num_sequences 2
-```
-
-**Parameters:**
-- `--fixed_residues`: Residues to keep unchanged (space/comma separated)
-- `--redesigned_residues`: Specific residues to redesign
-- `--chains_to_design`: Specific chains to design
-
----
-
-## MCP Server Installation
-
-### Option 1: Using fastmcp (Recommended)
-
-```bash
-# Install MCP server for Claude Code
-fastmcp install src/server.py --name LigandMPNN
-```
-
-### Option 2: Manual Installation for Claude Code
-
-```bash
-# Add MCP server to Claude Code
-claude mcp add LigandMPNN -- $(pwd)/env/bin/python $(pwd)/src/server.py
-
-# Verify installation
+# List registered MCP servers
 claude mcp list
+
+# You should see 'ligandmpnn' in the output
 ```
 
-### Option 3: Configure in settings.json
-
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "LigandMPNN": {
-      "command": "/home/xux/Desktop/ProteinMCP/ProteinMCP/tool-mcps/ligandmpnn_mcp/env/bin/python",
-      "args": ["/home/xux/Desktop/ProteinMCP/ProteinMCP/tool-mcps/ligandmpnn_mcp/src/server.py"]
-    }
-  }
-}
-```
+In Claude Code, you can now use all 7 LigandMPNN tools:
+- `simple_design`
+- `sequence_scoring`
+- `constrained_design`
+- `ca_only_design`
+- `submit_batch_design`
+- `get_job_status`
+- `get_job_result`
 
 ---
 
-## Using with Claude Code
+## Next Steps
 
-After installing the MCP server, you can use it directly in Claude Code.
-
-### Quick Start
-
-```bash
-# Start Claude Code
-claude
-```
-
-### Example Prompts
-
-#### Tool Discovery
-```
-What tools are available from LigandMPNN?
-```
-
-#### Basic Protein Design
-```
-Use simple_design with input file @examples/data/1BC8.pdb and generate 5 sequences
-```
-
-#### Ligand-Aware Design
-```
-Run ligand_design on @examples/data/1BC8.pdb with ligand context enabled
-```
-
-#### Sequence Scoring
-```
-Score this sequence using @examples/data/1BC8.pdb as reference: "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"
-```
-
-#### Constrained Design
-```
-Use constrained_design with @examples/data/1BC8.pdb, fixing residues 1, 2, and 3
-```
-
-#### Long-Running Tasks (Submit API)
-```
-Submit large design job for @examples/data/1BC8.pdb with 100 sequences
-Then check the job status
-```
-
-#### Batch Processing
-```
-Process these files in batch:
-- @examples/data/1BC8.pdb
-- @examples/data/2GFB.pdb
-- @examples/data/4GYT.pdb
-```
-
-### Using @ References
-
-In Claude Code, use `@` to reference files and directories:
-
-| Reference | Description |
-|-----------|-------------|
-| `@examples/data/1BC8.pdb` | Reference a specific PDB file |
-| `@configs/default_config.json` | Reference a config file |
-| `@results/` | Reference output directory |
+- **Detailed documentation**: See [detail.md](detail.md) for comprehensive guides on:
+  - Available MCP tools and parameters
+  - Local Python environment setup (alternative to Docker)
+  - Example workflows and use cases
+  - Configuration file options
+  - Troubleshooting
 
 ---
 
-## Using with Gemini CLI
+## Usage Examples
 
-### Configuration
+Once registered, you can use the LigandMPNN tools directly in Claude Code. Here are some common workflows:
 
-Add to `~/.gemini/settings.json`:
+### Example 1: Ligand-Aware Protein Design
 
-```json
-{
-  "mcpServers": {
-    "LigandMPNN": {
-      "command": "/home/xux/Desktop/ProteinMCP/ProteinMCP/tool-mcps/ligandmpnn_mcp/env/bin/python",
-      "args": ["/home/xux/Desktop/ProteinMCP/ProteinMCP/tool-mcps/ligandmpnn_mcp/src/server.py"]
-    }
-  }
-}
+```
+I have a protein-ligand complex at /path/to/1BC8.pdb. Can you use simple_design to generate 5 sequences that are optimized for the ligand binding context and save results to /path/to/results/?
 ```
 
-### Example Prompts
+### Example 2: Constrained Design with Fixed Residues
 
-```bash
-# Start Gemini CLI
-gemini
-
-# Example prompts (same as Claude Code)
-> What tools are available?
-> Use simple_design with file examples/data/1BC8.pdb
+```
+I want to redesign /path/to/protein.pdb while keeping the N-terminal residues fixed at positions 1, 2, 3. Can you use constrained_design with fixed_positions "1 2 3" and generate 3 sequences, saving to /path/to/results/?
 ```
 
----
+### Example 3: Batch Design Job
 
-## Available Tools
-
-### Quick Operations (Sync API)
-
-These tools return results immediately (< 10 minutes):
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `simple_design` | Basic protein sequence design | `input_file`, `chains`, `num_sequences`, `temperature` |
-| `sequence_scoring` | Score protein sequences | `input_file`, `fasta_sequences`, `save_probs` |
-| `constrained_design` | Design with fixed/redesigned positions | `input_file`, `chains_to_design`, `fixed_positions`, `num_sequences` |
-| `ca_only_design` | Design using only carbon alpha atoms | `input_file`, `chains`, `model`, `num_sequences` |
-| `validate_pdb_structure` | Validate PDB file compatibility | `input_file` |
-| `list_example_structures` | List available example structures | None |
-
-### Long-Running Tasks (Submit API)
-
-These tools return a job_id for tracking (> 10 minutes):
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `submit_batch_design` | Batch processing multiple files | `input_dir`, `file_pattern`, `chains`, `num_sequences` |
-| `submit_large_design` | Large-scale sequence generation | `input_file`, `chains`, `num_sequences`, `temperature` |
-
-### Job Management Tools
-
-| Tool | Description |
-|------|-------------|
-| `get_job_status` | Check job progress |
-| `get_job_result` | Get results when completed |
-| `get_job_log` | View execution logs |
-| `cancel_job` | Cancel running job |
-| `list_jobs` | List all jobs |
-
----
-
-## Examples
-
-### Example 1: Basic Protein Design
-
-**Goal:** Generate diverse sequences for 1BC8 (93-residue protein with ligand)
-
-**Using Script:**
-```bash
-python scripts/protein_design.py \
-  --input examples/data/1BC8.pdb \
-  --output results/basic_design \
-  --num_sequences 5 \
-  --temperature 0.1
 ```
-
-**Using MCP (in Claude Code):**
-```
-Use simple_design with input_file @examples/data/1BC8.pdb and num_sequences 5 to generate diverse protein sequences
-```
-
-**Expected Output:**
-- 5 FASTA sequence files in `results/basic_design/seqs/`
-- Generated sequences for 93 residues in chain A
-- Execution time: ~15 seconds
-- Design statistics showing sequence diversity
-
-### Example 2: Ligand-Aware Design
-
-**Goal:** Design protein sequences optimized for ligand binding
-
-**Using Script:**
-```bash
-python scripts/ligand_design.py \
-  --input examples/data/1BC8.pdb \
-  --output results/ligand_aware/ \
-  --num_sequences 3 \
-  --use_atom_context
-```
-
-**Using MCP (in Claude Code):**
-```
-Run ligand_design on @examples/data/1BC8.pdb with atom context enabled and generate 3 sequences
-```
-
-**Expected Output:**
-- Ligand-aware designed sequences
-- Optimized protein-ligand binding interfaces
-- Confidence scores for ligand interactions
-
-### Example 3: Sequence Likelihood Scoring
-
-**Goal:** Score the native sequence of 1BC8 to validate model performance
-
-**Using Script:**
-```bash
-python scripts/sequence_scoring.py \
-  --input examples/data/1BC8.pdb \
-  --sequences "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG" \
-  --output results/test_scoring.pt
-```
-
-**Using MCP (in Claude Code):**
-```
-Use sequence_scoring with @examples/data/1BC8.pdb to score this native sequence: "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"
-```
-
-**Expected Output:**
-- `results/1BC8.pt` file (271KB PyTorch tensor)
-- Likelihood scores for the 93-residue sequence
-- Execution time: ~3 seconds
-- High scores indicating native sequence compatibility
-
-### Example 4: Constrained Design
-
-**Goal:** Design 1BC8 while keeping N-terminal residues fixed
-
-**Using Script:**
-```bash
-python scripts/constrained_design.py \
-  --input examples/data/1BC8.pdb \
-  --output results/test_constrained \
-  --fixed_residues "C1 C2 C3" \
-  --num_sequences 1
-```
-
-**Using MCP (in Claude Code):**
-```
-Use constrained_design with @examples/data/1BC8.pdb and fixed_positions "1 2 3" to preserve N-terminal while redesigning the rest
-```
-
-**Expected Output:**
-- Fixed residues: ['C1', 'C2', 'C3'] (positions 1-3)
-- Redesigned residues: ['C4', 'C5', ..., 'C93'] (positions 4-93)
-- Execution time: ~4 seconds
-- Constraint satisfaction verified in output
-
-### Example 5: Multi-Structure Batch Processing
-
-**Goal:** Process all example structures (1BC8, 2GFB, 4GYT) in a single job
-
-**Using MCP (in Claude Code):**
-```
-Submit batch processing using submit_batch_design with input_dir @examples/data/ and file_pattern "*.pdb" and num_sequences 2
-```
-
-**Check Progress:**
-```
-Use get_job_status with the returned job_id to monitor progress
-Use get_job_log with the job_id to see execution details
-Use get_job_result when status shows completed
-```
-
-**Expected Output:**
-- Job submission with unique job_id (e.g., "bd872127")
-- Processing 3 PDB files: 1BC8.pdb (142KB), 2GFB.pdb (2.3MB), 4GYT.pdb (525KB)
-- 2 sequences generated per structure
-- Individual results for each protein in batch output directory
-
----
-
-## Demo Data
-
-The `examples/data/` directory contains sample data for testing:
-
-| File | Description | Use With |
-|------|-------------|----------|
-| `1BC8.pdb` | Small protein-ligand complex (142KB, 93 residues) | All design tools |
-| `2GFB.pdb` | Large protein structure with insertion codes (2.3MB) | Stress testing, batch |
-| `4GYT.pdb` | Multi-chain protein complex (525KB) | Multi-chain design |
-| `bias_AA_per_residue.json` | Per-residue amino acid bias configuration | Constrained design |
-| `omit_AA_per_residue.json` | Per-residue amino acid omission rules | Constrained design |
-| `pdb_ids.json` | Multi-structure processing configuration | Batch processing |
-
----
-
-## Configuration Files
-
-The `configs/` directory contains configuration templates:
-
-| Config | Description | Parameters |
-|--------|-------------|------------|
-| `default_config.json` | Comprehensive default settings | 45 parameters |
-| `protein_design_config.json` | Basic protein design settings | Model type, temperature, processing |
-| `ligand_design_config.json` | Ligand-aware design settings | Ligand context, side chains |
-| `sequence_scoring_config.json` | Sequence scoring settings | Model type, probability saving |
-| `constrained_design_config.json` | Constrained design settings | Fixed residues, constraints |
-
-### Config Example
-
-```json
-{
-  "_description": "Basic protein design configuration",
-  "model": {
-    "model_type": "protein_mpnn",
-    "temperature": 0.1,
-    "seed": 111
-  },
-  "processing": {
-    "batch_size": 1,
-    "verbose": 1
-  },
-  "constraints": {
-    "fixed_residues": "",
-    "redesigned_residues": ""
-  }
-}
+I have many PDB files in /path/to/structures/ directory. Can you submit a batch design job using submit_batch_design for all .pdb files, generate 10 sequences each, and save results to /path/to/results/? Monitor the job until it finishes.
 ```
 
 ---
 
 ## Troubleshooting
 
-### Environment Issues
-
-**Problem:** Environment not found
+**Docker not found?**
 ```bash
-# Recreate environment
-mamba create -p ./env python=3.10 -y
-mamba activate ./env
-pip install -r requirements.txt
+docker --version  # Install Docker if missing
 ```
 
-**Problem:** Import errors
+**GPU not accessible?**
+- Ensure NVIDIA Docker runtime is installed
+- Check with: `docker run --gpus all ubuntu nvidia-smi`
+
+**Claude Code not found?**
 ```bash
-# Verify installation
-python -c "from src.server import mcp"
-
-# Check tool count
-python -c "
-import sys; sys.path.insert(0, 'src')
-from server import mcp
-import asyncio
-print('Tools:', len(asyncio.run(mcp.get_tools())))
-"
+# Install Claude Code
+npm install -g @anthropic-ai/claude-code
 ```
-
-**Problem:** CUDA/PyTorch issues
-```bash
-# Check CUDA availability
-python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
-
-# Reinstall PyTorch if needed
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-```
-
-### MCP Issues
-
-**Problem:** Server not found in Claude Code
-```bash
-# Check MCP registration
-claude mcp list
-
-# Re-add if needed
-claude mcp remove LigandMPNN
-claude mcp add LigandMPNN -- $(pwd)/env/bin/python $(pwd)/src/server.py
-```
-
-**Problem:** Tools not working
-```bash
-# Test server directly
-python -c "
-import sys; sys.path.insert(0, 'src')
-from server import mcp
-import asyncio
-tools = asyncio.run(mcp.get_tools())
-print('Available tools:', list(tools.keys()))
-"
-```
-
-**Problem:** Path issues
-```bash
-# Verify paths exist
-ls -la examples/data/
-ls -la scripts/
-ls -la configs/
-
-# Check current directory
-pwd
-# Should be: /home/xux/Desktop/ProteinMCP/ProteinMCP/tool-mcps/ligandmpnn_mcp
-```
-
-### Job Issues
-
-**Problem:** Job stuck in pending
-```bash
-# Check job directory
-ls -la jobs/
-
-# View job log
-cat jobs/<job_id>/job.log
-```
-
-**Problem:** Job failed
-```
-Use get_job_log with job_id "<job_id>" and tail 100 to see error details
-```
-
-**Problem:** Out of memory
-- Reduce `num_sequences` parameter
-- Use smaller protein structures for testing
-- Ensure sufficient RAM available
-
-### Script Issues
-
-**Problem:** Repository not found
-```bash
-# Verify repo directory exists
-ls -la repo/
-
-# Check repo structure
-ls -la repo/LigandMPNN/
-```
-
-**Problem:** Model files missing
-```bash
-# Check for model files
-find repo/ -name "*.pt" -type f
-
-# Re-download if necessary
-cd repo && git pull
-```
-
-**Problem:** Permission errors
-```bash
-# Fix permissions
-chmod +x scripts/*.py
-chmod -R 755 env/
-```
-
----
-
-## Development
-
-### Running Tests
-
-```bash
-# Activate environment
-mamba activate ./env
-
-# Run integration tests
-python tests/integration_tests.py
-
-# Test individual tools
-python -c "from src.server import list_example_structures; print(list_example_structures())"
-```
-
-### Starting Dev Server
-
-```bash
-# Run MCP server in dev mode
-fastmcp dev src/server.py
-
-# Or run directly
-python src/server.py
-```
-
-### Performance Monitoring
-
-```bash
-# Monitor GPU usage
-nvidia-smi
-
-# Monitor job status
-python -c "from src.jobs.manager import job_manager; print(job_manager.list_jobs())"
-```
-
----
-
-## Performance Characteristics
-
-| Operation Type | Typical Runtime | Memory Usage | Concurrency |
-|---------------|-----------------|--------------|-------------|
-| Single design (1-10 seqs) | 5-15 seconds | ~1GB | Up to 4 concurrent |
-| Batch design (10+ files) | 10-60 minutes | ~1-2GB | 1 at a time |
-| Sequence scoring | 3-8 seconds | ~0.5GB | Up to 8 concurrent |
-| Validation | <1 second | ~10MB | Unlimited |
 
 ---
 
 ## License
 
-This project is based on [LigandMPNN](https://github.com/dauparas/LigandMPNN) and maintains the same MIT license.
-
-## Credits
-
-Based on [LigandMPNN](https://github.com/dauparas/LigandMPNN) by Dauparas et al.
-- Original Paper: [Robust deep learning–based protein sequence design using ProteinMPNN](https://www.science.org/doi/10.1126/science.add2187)
-- LigandMPNN Paper: [Atomic context-conditioned protein sequence design using LigandMPNN](https://www.biorxiv.org/content/10.1101/2023.12.13.571462v1)
-
-MCP Integration developed for the Claude Code ecosystem.
+MIT — Based on [LigandMPNN](https://github.com/dauparas/LigandMPNN) by Dauparas et al.
