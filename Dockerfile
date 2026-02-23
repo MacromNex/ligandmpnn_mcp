@@ -36,8 +36,10 @@ COPY configs/ ./configs/
 RUN chmod -R a+r /app/configs/
 
 # Create working directories
-RUN mkdir -p results jobs tmp
+RUN mkdir -p /app/results /app/jobs /app/tmp && chmod 777 /app /app/results /app/jobs /app/tmp
 
 ENV PYTHONPATH=/app
 
+ENV NVIDIA_CUDA_END_OF_LIFE=0
+ENTRYPOINT []
 CMD ["python", "src/server.py"]
